@@ -90,20 +90,16 @@ if [[ "$OS" = 'ubuntu' ]]; then
 	add-apt-repository ppa:wireguard/wireguard -y
 	apt-get update
 	if [[ $go = 1 ]]; then
+		sudo add-apt-repository ppa:longsleep/golang-backports
+		sudo apt-get update
+		sudo apt-get install -y golang-go
 		apt-get -y install make git
-		apt-get -y install wireguard-tools --no-install-recommends
-		cd /tmp
-		wget https://dl.google.com/go/go1.12.6.linux-amd64.tar.gz
-		tar zvxf go1.12.6.linux-amd64.tar.gz
-		sudo mv go /opt/go1.12.6
-		sudo ln -s /opt/go1.12.6/bin/go /usr/local/bin/go
-		cd /usr/local/src
+		cd /usr/local/src || mkdir -p /usr/local/src ; cd /usr/local/src 
 		git clone https://git.zx2c4.com/wireguard-go
 		cd wireguard-go
 		make
 		sudo cp wireguard-go /usr/local/bin
-		export WG_I_PREFER_BUGGY_USERSPACE_TO_POLISHED_KMOD=1
-
+		apt-get -y install wireguard-tools --no-install-recommends
 	else
 		apt-get -y install wireguard
 	fi
