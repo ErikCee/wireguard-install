@@ -90,7 +90,7 @@ if [[ "$OS" = 'ubuntu' ]]; then
 	add-apt-repository ppa:wireguard/wireguard -y
 	apt-get update
 	if [[ $go = 1 ]]; then
-		sudo add-apt-repository ppa:longsleep/golang-backports
+		sudo add-apt-repository ppa:longsleep/golang-backports -y
 		sudo apt-get update
 		sudo apt-get install -y golang-go
 		apt-get -y install make git
