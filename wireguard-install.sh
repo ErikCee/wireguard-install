@@ -99,15 +99,33 @@ if [[ $(which wg-quick) = "" ]]; then
 		add-apt-repository ppa:wireguard/wireguard -y
 		apt-get update
 		if [[ $go = 1 ]]; then
-			sudo add-apt-repository ppa:longsleep/golang-backports -y
-			sudo apt-get update
-			sudo apt-get install -y golang-go
-			apt-get -y install make git
-			cd /usr/local/src || mkdir -p /usr/local/src ; cd /usr/local/src
-			git clone https://git.zx2c4.com/wireguard-go
-			cd wireguard-go
-			make
-			sudo cp wireguard-go /usr/local/bin
+			if [[ $(lsmod | grep ^wireguard) != "" ]]; then
+				echo "Looks like your Virtual container has wireguard enables in its kernel."
+				echo "You can install wireguard-go, and it should use the kernel version, and"
+				echo "have the Go version as a backup."
+				read -p "Would you like to install wireguard-go? [y/n] " -n 1 -r
+				if [[ $REPLY =~ ^[Yy]$ ]]; then
+					sudo add-apt-repository ppa:longsleep/golang-backports -y
+					sudo apt-get update
+					sudo apt-get install -y golang-go
+					apt-get -y install make git
+					cd /usr/local/src || mkdir -p /usr/local/src ; cd /usr/local/src
+					git clone https://git.zx2c4.com/wireguard-go
+					cd wireguard-go
+					make
+					sudo cp wireguard-go /usr/local/bin
+				fi
+			else
+				sudo add-apt-repository ppa:longsleep/golang-backports -y
+				sudo apt-get update
+				sudo apt-get install -y golang-go
+				apt-get -y install make git
+				cd /usr/local/src || mkdir -p /usr/local/src ; cd /usr/local/src
+				git clone https://git.zx2c4.com/wireguard-go
+				cd wireguard-go
+				make
+				sudo cp wireguard-go /usr/local/bin
+			fi
 			apt-get -y install wireguard-tools --no-install-recommends
 		else
 			apt-get -y install wireguard
