@@ -39,12 +39,37 @@ fi
 
 read -rp "IPv4 or IPv6 public address: " -e -i "$SERVER_PUB_IPV4" SERVER_PUB_IP
 
-# Detect public interface and pre-fill for the user
-SERVER_PUB_NIC="$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)"
-if [[ $SERVER_PUB_NIC = "" ]]; then
-	SERVER_PUB_NIC=$(ip -6 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
+# Detect public interfaces and pre-fill for the user
+SERVER_PUB_NICv4="$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)"
+if [[ $SERVER_PUB_NICv4 = "" ]]; then
+	SERVER_PUB_NICv6=$(ip -6 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
+	if [[ $SERVER_PUB_NICv6 != "" ]]; then
+		while true; do
+	    read -p "Hmmmmmm.. You seem to be on a IPv6 only network! Would you like to install clat to preform 64XLAT translation to allow IPv4 hardcoded ip addresses to work? [Y/n]:" yn
+	    case $yn in
+	        [Yy]* ) SERVER_IPV6_ONLY=1
+					break
+					;;
+	        [Nn]* ) echo "IPv4 isn't currently routable... Installing as if it will be in the future."
+					break
+					;;
+	        * ) echo "Please answer yes or no.";;
+	    esac
+		done
+	else
+		SERVER_PUB_NICv4=$SERVER_PUB_NICv6
+	fi
 fi
-read -rp "Public interface: " -e -i "$SERVER_PUB_NIC" SERVER_PUB_NIC
+read -rp "Public IPv4 interface: " -e -i "$SERVER_PUB_NICv4" SERVER_PUB_NICv4
+
+SERVER_PUB_NICv6=$(ip -6 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
+if [[ $SERVER_PUB_NICv6 = "" ]]; then
+	SERVER_PUB_NICv6=$(ip -6 route  | awk '/via/ { print $5 }'| head -1)
+	if [[ $SERVER_PUB_NICv6 = "" ]]; then
+		SERVER_PUB_NICv6=$SERVER_PUB_NICv4
+	fi
+fi
+read -rp "Public IPv6 interface: " -e -i "$SERVER_PUB_NICv6" SERVER_PUB_NICv6
 
 SERVER_WG_NIC="wg0"
 read -rp "WireGuard interface name: " -e -i "$SERVER_WG_NIC" SERVER_WG_NIC
@@ -52,6 +77,9 @@ read -rp "WireGuard interface name: " -e -i "$SERVER_WG_NIC" SERVER_WG_NIC
 SERVER_WG_IPV4="10.111.222.1"
 read -rp "Server's WireGuard IPv4 " -e -i "$SERVER_WG_IPV4" SERVER_WG_IPV4
 
+echo "Current IPv6 IP's in use:"
+ifconfig | awk '/inet6/ { print $2"/"$4 }'
+echo ""
 SERVER_WG_IPV6="fd42:42:42::1"
 read -rp "Server's WireGuard IPv6 " -e -i "$SERVER_WG_IPV6" SERVER_WG_IPV6
 
@@ -92,12 +120,20 @@ else
   ENDPOINT="$SERVER_PUB_IP:$SERVER_PORT"
 fi
 
-if [[ $(which wg-quick) = "" ]]; then
+if [[ $(command -v wg-quick) = "" ]]; then
 	# Install WireGuard tools and module
 	if [[ "$OS" = 'ubuntu' ]]; then
 		apt install software-properties-common -y
 		add-apt-repository ppa:wireguard/wireguard -y
 		apt-get update
+		if [[ $SERVER_IPV6_ONLY = 1 ]]; then
+			apt-get -y install perl-base perl-modules libnet-ip-perl libnet-dns-perl libio-socket-inet6-perl iproute2 iptables tayga git make
+			cd /usr/local/src || mkdir -p /usr/local/src ; cd /usr/local/src
+			ipv6prefix=$(echo $SERVER_WG_IPV6 | sed -e 's+:.*,++' ) ; ipv6prefix="${ipv6prefix%:*}:"
+			echo "clat-v6-addr=${ipv6prefix}aa1" > /etc/clatd.conf
+			git clone https://github.com/toreanderson/clatd
+			make -C clatd install
+		fi
 		if [[ $go = 1 ]]; then
 			if [[ $(lsmod | grep ^wireguard) != "" ]]; then
 				echo "Looks like your Virtual container has wireguard enables in its kernel."
@@ -146,6 +182,16 @@ if [[ $(which wg-quick) = "" ]]; then
 		pacman -S wireguard-tools
 	fi
 fi
+if [[ "$OS" = 'ubuntu' ]]; then
+	if [[ $SERVER_IPV6_ONLY = 1 ]]; then
+		apt-get -y install perl-base perl-modules libnet-ip-perl libnet-dns-perl libio-socket-inet6-perl iproute2 iptables tayga git make
+		cd /usr/local/src || mkdir -p /usr/local/src ; cd /usr/local/src
+		ipv6prefix=$(echo $SERVER_WG_IPV6 | sed -e 's+:.*,++' ) ; ipv6prefix="${ipv6prefix%:*}:"
+		echo "clat-v6-addr=${ipv6prefix}aa1" > /etc/clatd.conf
+		git clone https://github.com/toreanderson/clatd
+		make -C clatd install
+	fi
+fi
 
 # Make sure the directory exists (this does not seem the be the case on fedora)
 mkdir /etc/wireguard > /dev/null 2>&1
@@ -162,16 +208,16 @@ case "$IS_PRE_SYMM" in
 		# echo "PresharedKey = $CLIENT_SYMM_PRE_KEY" >> "$HOME/$SERVER_WG_NIC-client-$post.conf"
 		;;
 esac
-
-
-
+if [[ $SERVER_IPV6_ONLY = 1 ]]; then
+	SERVER_PUB_NICv4="clat"
+fi
 # Add server interface
 echo "[Interface]
 Address = $SERVER_WG_IPV4/24,$SERVER_WG_IPV6/64
 ListenPort = $SERVER_PORT
 PrivateKey = $SERVER_PRIV_KEY
-PostUp = iptables -t nat -A POSTROUTING -o $SERVER_PUB_NIC -j MASQUERADE; iptables -A FORWARD -i $SERVER_WG_NIC -j ACCEPT; iptables -A INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT; ip6tables -A FORWARD -i $SERVER_WG_NIC -j ACCEPT; ip6tables -t nat -A POSTROUTING -o $SERVER_PUB_NIC -j MASQUERADE; ip6tables -A INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT
-PostDown = iptables -t nat -D POSTROUTING -o $SERVER_PUB_NIC -j MASQUERADE; iptables -D FORWARD -i $SERVER_WG_NIC -j ACCEPT; iptables -D INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT; ip6tables -D FORWARD -i $SERVER_WG_NIC -j ACCEPT; ip6tables -t nat -D POSTROUTING -o $SERVER_PUB_NIC -j MASQUERADE; ip6tables -D INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT
+PostUp = iptables -t nat -A POSTROUTING -o $SERVER_PUB_NICv4 -j MASQUERADE; iptables -A FORWARD -i $SERVER_PUB_NICv4 -j ACCEPT; iptables -A INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT; ip6tables -A FORWARD -i $SERVER_WG_NIC -j ACCEPT; ip6tables -t nat -A POSTROUTING -o $SERVER_PUB_NICv6 -j MASQUERADE; ip6tables -A INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT
+PostDown = iptables -t nat -D POSTROUTING -o $SERVER_PUB_NICv4 -j MASQUERADE; iptables -D FORWARD -i $SERVER_PUB_NICv4 -j ACCEPT; iptables -D INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT; ip6tables -D FORWARD -i $SERVER_WG_NIC -j ACCEPT; ip6tables -t nat -D POSTROUTING -o $SERVER_PUB_NICv6 -j MASQUERADE; ip6tables -D INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT
 
 " > "/etc/wireguard/$SERVER_WG_NIC.conf"
 
@@ -228,6 +274,10 @@ sysctl --system
 
 systemctl start "wg-quick@$SERVER_WG_NIC"
 systemctl enable "wg-quick@$SERVER_WG_NIC"
+if [[ $SERVER_IPV6_ONLY = 1 ]]; then
+	systemctl start clatd
+	systemctl enable clatd
+fi
 
 if [[ $go = 1 ]]; then
 	systemctl stop "wg-quick@$SERVER_WG_NIC"
