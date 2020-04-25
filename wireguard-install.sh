@@ -216,8 +216,8 @@ echo "[Interface]
 Address = $SERVER_WG_IPV4/24,$SERVER_WG_IPV6/64
 ListenPort = $SERVER_PORT
 PrivateKey = $SERVER_PRIV_KEY
-PostUp = iptables -t nat -A POSTROUTING -o $SERVER_PUB_NICv4 -j MASQUERADE; iptables -A FORWARD -i $SERVER_PUB_NICv4 -j ACCEPT; iptables -A INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT; ip6tables -A FORWARD -i $SERVER_WG_NIC -j ACCEPT; ip6tables -t nat -A POSTROUTING -o $SERVER_PUB_NICv6 -j MASQUERADE; ip6tables -A INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT
-PostDown = iptables -t nat -D POSTROUTING -o $SERVER_PUB_NICv4 -j MASQUERADE; iptables -D FORWARD -i $SERVER_PUB_NICv4 -j ACCEPT; iptables -D INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT; ip6tables -D FORWARD -i $SERVER_WG_NIC -j ACCEPT; ip6tables -t nat -D POSTROUTING -o $SERVER_PUB_NICv6 -j MASQUERADE; ip6tables -D INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT
+PostUp = iptables -A FORWARD -i $SERVER_WG_NIC -j ACCEPT; iptables -t nat -A POSTROUTING -o $SERVER_PUB_NICv4 -j MASQUERADE; iptables -A FORWARD -i $SERVER_PUB_NICv4 -j ACCEPT; iptables -A INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT; ip6tables -A FORWARD -i $SERVER_WG_NIC -j ACCEPT; ip6tables -A FORWARD -i $SERVER_WG_NIC -j ACCEPT; ip6tables -t nat -A POSTROUTING -o $SERVER_PUB_NICv6 -j MASQUERADE; ip6tables -A INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT
+PostDown = iptables -D FORWARD -i $SERVER_WG_NIC -j ACCEPT; iptables -t nat -D POSTROUTING -o $SERVER_PUB_NICv4 -j MASQUERADE; iptables -D FORWARD -i $SERVER_PUB_NICv4 -j ACCEPT; iptables -D INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT; ip6tables -D FORWARD -i $SERVER_WG_NIC -j ACCEPT; ip6tables -D FORWARD -i $SERVER_WG_NIC -j ACCEPT; ip6tables -t nat -D POSTROUTING -o $SERVER_PUB_NICv6 -j MASQUERADE; ip6tables -D INPUT -p udp -m udp --dport $SERVER_PORT -j ACCEPT
 
 " > "/etc/wireguard/$SERVER_WG_NIC.conf"
 
